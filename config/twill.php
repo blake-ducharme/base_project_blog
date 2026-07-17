@@ -1,21 +1,23 @@
 <?php
 
 return [
-    'media_library' => [
-        'disk' => 'twill_media_library',
-        'endpoint_type' => 'local',
-        'local_path' => 'uploads',
-        'image_service' => \A17\Twill\Services\MediaLibrary\Glide::class,
-        'cascade_delete' => false,
-        'allowed_extensions' => ['svg', 'jpg', 'gif', 'png', 'jpeg', 'webp'],
-    ],
-
-    'glide' => [
-        'base_path' => 'img',
-        'base_url' => null,
-    ],
-
-    'enabled' => [
-        'settings' => true,
+    'block_editor' => [
+        'use_twill_blocks' => [],
+        'crops' => [
+            'highlight' => [
+                'desktop' => [
+                    [
+                        'name' => 'desktop',
+                        'ratio' => 16 / 9,
+                    ],
+                ],
+                'mobile' => [
+                    [
+                        'name' => 'mobile',
+                        'ratio' => 1,
+                    ],
+                ],
+            ],
+        ],
     ],
 ];
