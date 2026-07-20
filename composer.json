@@ -8,6 +8,8 @@
     "require": {
         "php": "^8.2",
         "area17/twill": "^3.5",
+        "area17/twill-image": "^2.1",
+        "cwsdigital/twill-metadata": "^1.4",
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1"
     },

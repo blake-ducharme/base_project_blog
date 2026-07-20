@@ -8,10 +8,11 @@ use A17\Twill\Models\Behaviors\HasSlug;
 use A17\Twill\Models\Behaviors\HasMedias;
 use A17\Twill\Models\Behaviors\HasRevisions;
 use A17\Twill\Models\Model;
+use CwsDigital\TwillMetadata\Models\Behaviours\HasMetadata;
 
 class Page extends Model
 {
-    use HasBlocks, HasTranslation, HasSlug, HasMedias, HasRevisions;
+    use HasBlocks, HasTranslation, HasSlug, HasMedias, HasRevisions, HasMetadata;
 
     protected $fillable = [
         'published',
@@ -27,4 +28,12 @@ class Page extends Model
     public $slugAttributes = [
         'title',
     ];
+
+    public array $metadataFallbacks = [
+        'description' => 'description',
+    ];
+
+    public string $metadataDefaultOgType = 'website';
+
+    public string $metadataDefaultCardType = 'summary_large_image';
 }

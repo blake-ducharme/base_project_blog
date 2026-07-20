@@ -22,8 +22,9 @@ class AppServiceProvider extends ServiceProvider
         TwillNavigation::addLink(
             NavigationLink::make()->forModule('menuLinks')->title('Menu')
         );
-        TwillAppSettings::registerSettingsGroup(
-            SettingsGroup::make()->name('homepage')->label('Homepage')
+        TwillAppSettings::registerSettingsGroups(
+            SettingsGroup::make()->name('homepage')->label('Homepage'),
+            SettingsGroup::make()->name('seo')->label(trans('twill-metadata::form.titles.fieldset')),
         );
     }
 }
