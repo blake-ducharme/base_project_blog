@@ -183,10 +183,10 @@ Do **not** rsync the whole project. Dreamhost’s checkout is the git repo; rsyn
 
 ### PHP version (Herd 8.4 ↔ Dreamhost 8.4)
 
-Local Herd uses **PHP 8.4**, so `composer.lock` may require packages that need `php >=8.4.1`. Match production:
+Local Herd uses **PHP 8.4**, so `composer.lock` often requires packages with `php >=8.4.1`. Production should match.
 
 1. **Panel:** set the domain to **PHP 8.4** (web).
-2. **SSH:** do **not** rely on bare `php` — the shell default is often older (e.g. 8.2) even when the panel says 8.3/8.4. Always call **8.4** explicitly:
+2. **SSH:** do **not** rely on bare `php` — the shell default is often older even when the panel shows 8.3/8.4. Always call **8.4** explicitly:
 
 ```bash
 /usr/local/php84/bin/php -v
@@ -199,6 +199,56 @@ export PATH=/usr/local/php84/bin:$PATH
 # then: source ~/.bash_profile && php -v
 ```
 
+#### If the panel change to 8.4 fails and reverts
+
+DreamHost runs a quick compatibility check; on failure you see something like **“PHP Change Unsuccessful… reverted”**. Common causes:
+
+- Domain docroot is **not** the Laravel `public/` folder (or the domain folder still has old/WordPress/other PHP)
+- Leftover incompatible scripts in the domain directory
+- Choosing “Revert to previous PHP version” when the check fails (default)
+
+**Diagnose on SSH** (from the site root, adjust paths):
+
+```bash
+# Does 8.4 CLI exist?
+/usr/local/php84/bin/php -v
+
+# Boot Laravel on 8.4 — should print the app name, not a fatal error
+cd /path/to/site
+/usr/local/php84/bin/php artisan --version
+```
+
+Also confirm in the panel that the domain points at `…/your-site/public`.
+
+Retry the panel upgrade; if it still reverts, you can force 8.4 via `.htaccess` in **`public/`** (DreamHost docs):
+
+```apache
+AddHandler fcgid-script .php
+FCGIWrapper "/dh/cgi-system/php84.cgi" .php
+```
+
+See: [Change the PHP version of a site](https://help.dreamhost.com/hc/en-us/articles/214895317-Change-the-PHP-version-of-a-site) and [PHP upgrade failure troubleshooting](https://help.dreamhost.com/hc/en-us/articles/360001402163-PHP-upgrade-failure-troubleshooting).
+
+#### Composer: “require a PHP version >= 8.4.1”
+
+That message means **`composer.lock` was built on PHP 8.4**. Installing with 8.2/8.3 CLI will fail (or warn). Fix by either:
+
+- **A (preferred):** run Composer with 8.4 and get the **web** vhost onto 8.4 (panel or `.htaccess` above), or  
+- **B (stay on 8.3):** regenerate the lock on your Mac for 8.3, commit, push, then install on the server with `php83`:
+
+```bash
+# on Mac (in the site repo)
+herd composer config platform.php 8.3.30
+herd composer update
+git add composer.json composer.lock && git commit -m "Target PHP 8.3 for Dreamhost" && git push
+
+# on Dreamhost
+git pull
+/usr/local/php83/bin/php composer.phar install --no-dev --optimize-autoloader
+```
+
+Do **not** rely on `--ignore-platform-reqs` long-term if the web PHP is still 8.3 — some packages truly need 8.4 at runtime.
+
 ### `composer.phar` (server only)
 
 Not committed. Install once on Dreamhost (home or site dir), using PHP 8.4:
@@ -208,6 +258,40 @@ curl -sS https://getcomposer.org/installer | /usr/local/php84/bin/php
 # leaves composer.phar in the current directory
 ```
 
+### Production `.env` (required — never committed / never rsynced)
+
+On Dreamhost, create `.env` in the site root (copy from `.env.example`, then edit). At minimum:
+
+```env
+APP_NAME="Your Site"
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://dev.recevik.com
+
+APP_KEY=
+# generate on the server (see below) — MissingAppKeyException means this is empty
+
+TWILL_ADMIN_APP_URL=https://dev.recevik.com
+TWILL_ADMIN_APP_PATH=admin
+
+DB_CONNECTION=mysql
+DB_HOST=…
+DB_DATABASE=…
+DB_USERNAME=…
+DB_PASSWORD=…
+```
+
+Generate the key **on the server** (do not copy a local key unless you intend to):
+
+```bash
+cd /path/to/site
+/usr/local/php84/bin/php artisan key:generate
+/usr/local/php84/bin/php artisan config:clear
+/usr/local/php84/bin/php artisan config:cache
+```
+
+`key:generate` writes `APP_KEY=base64:…` into `.env`. If you already ran `config:cache` with an empty key, **`config:clear` then `config:cache` again** after generating.
+
 ### 1. Code (GitHub → Dreamhost)
 
 ```bash
@@ -215,18 +299,35 @@ curl -sS https://getcomposer.org/installer | /usr/local/php84/bin/php
 cd ~/Developer/BD_PROJECTS/my-client-blog
 git push
 
-# on Dreamhost (SSH) — first time: clone the SITE repo (not the starter), add production .env
-# git clone https://github.com/blake-ducharme/my-client-blog.git /path/to/site
+# on Dreamhost (SSH) — first time:
+#   git clone https://github.com/blake-ducharme/my-client-blog.git /path/to/site
+#   cp .env.example .env   # then edit production values
+#   /usr/local/php84/bin/php artisan key:generate
 
 cd /path/to/site
 git pull
 /usr/local/php84/bin/php composer.phar install --no-dev --optimize-autoloader
+# if APP_KEY is empty in .env:
+# /usr/local/php84/bin/php artisan key:generate
 /usr/local/php84/bin/php artisan migrate --force
 /usr/local/php84/bin/php artisan storage:link
+/usr/local/php84/bin/php artisan config:clear
 /usr/local/php84/bin/php artisan config:cache
 /usr/local/php84/bin/php artisan route:cache
 /usr/local/php84/bin/php artisan view:cache
 ```
+
+### First-time only: Home page seed + Twill admin
+
+On a **new** production database (after migrate), seed the Home page and create a superadmin. Do **not** re-run this on every deploy.
+
+```bash
+cd /path/to/site
+/usr/local/php84/bin/php artisan db:seed --force --class=HomePageSeeder
+/usr/local/php84/bin/php artisan twill:superadmin
+```
+
+That creates a published **Home** page, selects it under **Settings → Homepage**, and prompts for the first `/admin` user.
 
 ### 2. Frontend assets (`./rsync.sh`)
 
