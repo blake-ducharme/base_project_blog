@@ -22,6 +22,47 @@ herd composer …
 
 `bin/setup.sh` and `new-twill-blog` already call `herd php` and `herd composer`.
 
+## Herd without the UI (CLI)
+
+Herd does **not** start/stop individual sites like Apache vhosts. While Herd’s services are running, every **linked** (or parked) folder is already available at `http://{folder}.test`.
+
+### 1. Start / stop the Herd stack (nginx + PHP-FPM)
+
+```bash
+herd start              # start Herd services
+herd stop               # stop Herd services
+herd restart            # restart all
+herd restart nginx      # optional: one service
+herd restart php
+```
+
+### 2. Register / remove a site (hosts)
+
+Sites under `BD_PROJECTS` are **not** in Herd’s parked path (`~/Herd/` only). They must be **linked** (same pattern as `bd_shop`). `bin/setup.sh` runs `herd link` for you.
+
+```bash
+cd ~/Developer/BD_PROJECTS/my-client-blog
+herd link my-client-blog      # add → http://my-client-blog.test
+herd unlink my-client-blog    # remove from Herd
+
+herd sites                    # list all sites
+herd links                    # linked sites only
+herd parked                   # sites under parked paths (~/Herd)
+herd open my-client-blog      # open in browser
+```
+
+If a site is missing from the Herd UI / Sites list after setup:
+
+```bash
+cd ~/Developer/BD_PROJECTS/muratrecevik
+herd link muratrecevik
+herd links   # confirm
+```
+
+### 3. MySQL is DBngin (not Herd)
+
+Local MySQL is managed by **DBngin**, separate from Herd start/stop. See [DBngin](#dbngin) below. Do not rely on Herd’s MySQL for this starter.
+
 ## New site (recommended)
 
 From `~/Developer/BD_PROJECTS`:
@@ -34,20 +75,6 @@ This clones [base_project_blog](https://github.com/blake-ducharme/base_project_b
 
 - Herd URL: `http://my-client-blog.test` (registered with `herd link`)
 - DBngin MySQL service + Laravel schema: `my-client-blog`
-
-### Why a new site may be missing from the Herd UI
-
-Herd’s **parked** path is only `~/Herd/`. Projects under `BD_PROJECTS` are **not** auto-listed until linked (same pattern as `bd_shop`).
-
-`bin/setup.sh` runs `herd link <folder-name>` so the site appears under Herd links / Sites.
-
-To fix an existing folder that was set up before this:
-
-```bash
-cd ~/Developer/BD_PROJECTS/muratrecevik
-herd link muratrecevik
-herd links   # confirm
-```
 
 ### DBngin
 
@@ -63,6 +90,8 @@ Defaults: `127.0.0.1:3306`, user `root`, empty password.
 Do **not** manually start `PeterDB` / `bd_shop` / etc. for a new site — let setup create/start the project-named service so migrations never land on another project’s server.
 
 Also stop any **non-DBngin** MySQL that might bind `3306` (e.g. Herd MySQL).
+
+You can still Start/Stop services in the DBngin app if needed; only **one** MySQL on port `3306` should run at a time.
 
 ## Existing clone / manual setup
 
