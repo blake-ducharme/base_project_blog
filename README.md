@@ -69,12 +69,23 @@ From `~/Developer/BD_PROJECTS`:
 
 ```bash
 ./new-twill-blog my-client-blog
+# optional: GH_OWNER=blake-ducharme GH_VISIBILITY=private ./new-twill-blog my-client-blog
+# local only (no GitHub): ./new-twill-blog my-client-blog --skip-github
 ```
 
-This clones [base_project_blog](https://github.com/blake-ducharme/base_project_blog) into `my-client-blog` and runs `bin/setup.sh`. The **folder name** becomes:
+This:
 
-- Herd URL: `http://my-client-blog.test` (registered with `herd link`)
+1. Clones the [base_project_blog](https://github.com/blake-ducharme/base_project_blog) **starter**
+2. Creates a **new GitHub repo** `blake-ducharme/my-client-blog` (via `gh`), renames the starter remote to `starter`, sets `origin` to the new repo, and pushes
+3. Runs `bin/setup.sh` (Herd PHP, DBngin, `herd link`)
+
+The **folder name** becomes:
+
+- Herd URL: `http://my-client-blog.test`
 - DBngin MySQL service + Laravel schema: `my-client-blog`
+- GitHub repo name (default owner `blake-ducharme`)
+
+Requires [GitHub CLI](https://cli.github.com/) (`gh auth login`).
 
 ### DBngin
 
@@ -160,9 +171,37 @@ Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BAS
 
 ## Deploy to Dreamhost
 
-Build assets on your Mac, then rsync. On the server, install PHP deps with **`composer.phar`** (not a global `composer` binary).
+**Split deploy model:**
 
-Put deploy targets in the **local** `.env` (gitignored; never rsynced to the server):
+| What | How |
+|------|-----|
+| App code (PHP, views, config, …) | Push to the site’s **GitHub** repo → on Dreamhost **`git pull`** |
+| PHP dependencies | On Dreamhost: **`php composer.phar install …`** |
+| Frontend build (`public/build/`) | Build on your Mac → **`./rsync.sh`** (assets only; `public/build` is gitignored) |
+
+Do **not** rsync the whole project. Dreamhost’s checkout is the git repo; rsync only refreshes Vite output.
+
+### 1. Code (GitHub → Dreamhost)
+
+```bash
+# on your Mac
+cd ~/Developer/BD_PROJECTS/my-client-blog
+git push
+
+# on Dreamhost (SSH)
+cd /path/to/site
+git pull
+php composer.phar install --no-dev --optimize-autoloader
+php artisan migrate --force
+php artisan storage:link
+php artisan config:cache && php artisan route:cache && php artisan view:cache
+```
+
+First-time server: clone the **site** GitHub repo (not the starter), create production `.env`, then the commands above.
+
+### 2. Frontend assets (`./rsync.sh`)
+
+Put targets in the **local** `.env` (gitignored; never sent to the server):
 
 ```env
 REMOTE_USER=your-dreamhost-user
@@ -170,22 +209,14 @@ REMOTE_HOST=your-domain.com
 REMOTE_PATH=/home/your-dreamhost-user/your-site
 ```
 
-Then:
+`REMOTE_PATH` is the site root (same directory as the git checkout). The script syncs:
+
+`local public/build/` → `remote $REMOTE_PATH/public/build/`
 
 ```bash
-./rsync.sh           # npm ci + npm run build, then rsync
+./rsync.sh           # npm ci + npm run build, then rsync public/build/
 ./rsync.sh --dry-run
 ./rsync.sh --no-build
 ```
 
-Optional: `export REMOTE_USER=…` still overrides `.env` for one-off deploys.
-
-The script never overwrites remote `.env` and excludes `vendor/` / `node_modules/`. After the first deploy (and after dependency changes), on the server:
-
-```bash
-cd /path/to/site
-php composer.phar install --no-dev --optimize-autoloader
-php artisan migrate --force
-php artisan storage:link
-php artisan config:cache && php artisan route:cache && php artisan view:cache
-```
+Optional: `export REMOTE_USER=…` still overrides `.env` for one-off runs.

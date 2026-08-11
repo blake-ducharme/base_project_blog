@@ -78,4 +78,11 @@ ui_print_site_reference() {
   ui_cmd "herd composer install"
   ui_cmd "npm run dev"
   echo ""
+  ui_step "Deploy"
+  ui_info "App code → GitHub → git pull on Dreamhost"
+  ui_info "Vite assets only → ./rsync.sh (public/build/)"
+  ui_cmd "git push"
+  ui_cmd "./rsync.sh"
+  ui_info "On Dreamhost: git pull && php composer.phar install --no-dev --optimize-autoloader"
+  echo ""
 }
