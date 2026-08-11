@@ -71,7 +71,10 @@ cd /path/to/your-site-folder   # folder name = Herd host
 ./bin/setup.sh
 # ./bin/setup.sh --no-admin
 # ./bin/setup.sh --no-seed
+# ./bin/setup.sh --instructions   # reprint URLs + Herd commands
 ```
+
+If you run `./new-twill-blog existing-folder` again, it does **not** re-clone; it reprints the same reference card.
 
 Or step by step (**Herd PHP**):
 
@@ -130,16 +133,23 @@ Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BAS
 
 Build assets on your Mac, then rsync. On the server, install PHP deps with **`composer.phar`** (not a global `composer` binary).
 
-```bash
-# set remotes per site
-export REMOTE_USER=your-dreamhost-user
-export REMOTE_HOST=your-domain.com
-export REMOTE_PATH=/home/your-dreamhost-user/your-site
+Put deploy targets in the **local** `.env` (gitignored; never rsynced to the server):
 
+```env
+REMOTE_USER=your-dreamhost-user
+REMOTE_HOST=your-domain.com
+REMOTE_PATH=/home/your-dreamhost-user/your-site
+```
+
+Then:
+
+```bash
 ./rsync.sh           # npm ci + npm run build, then rsync
 ./rsync.sh --dry-run
 ./rsync.sh --no-build
 ```
+
+Optional: `export REMOTE_USER=…` still overrides `.env` for one-off deploys.
 
 The script never overwrites remote `.env` and excludes `vendor/` / `node_modules/`. After the first deploy (and after dependency changes), on the server:
 

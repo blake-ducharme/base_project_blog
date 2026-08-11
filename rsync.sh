@@ -11,10 +11,40 @@ set -euo pipefail
 #   ./rsync.sh --no-build
 #   SKIP_BUILD=1 ./rsync.sh
 #
-# Per-site remotes (override defaults):
-#   REMOTE_USER=myuser REMOTE_HOST=example.com REMOTE_PATH=/home/myuser/site ./rsync.sh
+# Remotes (first match wins):
+#   1) already-exported env: REMOTE_USER / REMOTE_HOST / REMOTE_PATH
+#   2) values in local .env (same keys)
+#   3) placeholders (script warns)
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Read KEY from .env without sourcing the whole file (avoids breaking on special chars).
+env_get() {
+  local key="$1"
+  local file="${ROOT}/.env"
+  [[ -f "$file" ]] || return 0
+  local line
+  line="$(grep -E "^${key}=" "$file" | tail -n 1 || true)"
+  [[ -n "$line" ]] || return 0
+  local value="${line#*=}"
+  # Strip optional surrounding quotes
+  value="${value%\"}"
+  value="${value#\"}"
+  value="${value%\'}"
+  value="${value#\'}"
+  printf '%s' "$value"
+}
+
+if [[ -z "${REMOTE_USER:-}" ]]; then
+  REMOTE_USER="$(env_get REMOTE_USER)"
+fi
+if [[ -z "${REMOTE_HOST:-}" ]]; then
+  REMOTE_HOST="$(env_get REMOTE_HOST)"
+fi
+if [[ -z "${REMOTE_PATH:-}" ]]; then
+  REMOTE_PATH="$(env_get REMOTE_PATH)"
+fi
+
 REMOTE_USER="${REMOTE_USER:-your-dreamhost-user}"
 REMOTE_HOST="${REMOTE_HOST:-your-domain.com}"
 REMOTE_PATH="${REMOTE_PATH:-/home/your-dreamhost-user/your-site}"
@@ -45,7 +75,7 @@ fi
 
 if [[ "$REMOTE_USER" == "your-dreamhost-user" || "$REMOTE_HOST" == "your-domain.com" ]]; then
   echo "WARNING: Using placeholder REMOTE_* values." >&2
-  echo "Set REMOTE_USER, REMOTE_HOST, and REMOTE_PATH for this site before a real deploy." >&2
+  echo "Set REMOTE_USER, REMOTE_HOST, and REMOTE_PATH in .env (or export them) before a real deploy." >&2
   echo "" >&2
 fi
 
@@ -92,6 +122,8 @@ rsync "${RSYNC_OPTS[@]}" \
   --exclude '.zed/' \
   --exclude 'rsync.sh' \
   --exclude 'bin/setup.sh' \
+  --exclude 'bin/ui.sh' \
+  --exclude 'bin/dbngin.sh' \
   "$ROOT/" \
   "$REMOTE/"
 

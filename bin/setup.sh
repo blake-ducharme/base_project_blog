@@ -8,13 +8,21 @@ set -euo pipefail
 #   ./bin/setup.sh
 #   ./bin/setup.sh --no-admin
 #   ./bin/setup.sh --no-seed
+#   ./bin/setup.sh --instructions   # reprint reference card only
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 SITE_NAME="$(basename "$ROOT")"
 APP_URL="http://${SITE_NAME}.test"
 
+# shellcheck source=ui.sh
+source "${BIN_DIR}/ui.sh"
+# shellcheck source=dbngin.sh
+source "${BIN_DIR}/dbngin.sh"
+
 DO_SEED=1
 DO_ADMIN=1
+INSTRUCTIONS_ONLY=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -24,13 +32,16 @@ for arg in "$@"; do
     --no-admin)
       DO_ADMIN=0
       ;;
+    --instructions|--ref|--reference)
+      INSTRUCTIONS_ONLY=1
+      ;;
     -h|--help)
-      echo "Usage: $0 [--no-seed] [--no-admin]"
+      echo "Usage: $0 [--no-seed] [--no-admin] [--instructions]"
       exit 0
       ;;
     *)
-      echo "Unknown option: $arg" >&2
-      echo "Usage: $0 [--no-seed] [--no-admin]" >&2
+      ui_err "Unknown option: $arg"
+      echo "Usage: $0 [--no-seed] [--no-admin] [--instructions]" >&2
       exit 1
       ;;
   esac
@@ -38,17 +49,19 @@ done
 
 cd "$ROOT"
 
-# shellcheck source=dbngin.sh
-source "$(cd "$(dirname "$0")" && pwd)/dbngin.sh"
+if [[ "$INSTRUCTIONS_ONLY" -eq 1 ]]; then
+  ui_print_site_reference "$SITE_NAME" "$ROOT" "$APP_URL"
+  exit 0
+fi
 
 herd_require() {
   if ! command -v herd >/dev/null 2>&1; then
-    echo "ERROR: Laravel Herd CLI not found on PATH." >&2
-    echo "Install Herd and ensure its bin dir is on PATH, then retry." >&2
+    ui_err "Laravel Herd CLI not found on PATH."
+    ui_info "Install Herd and ensure its bin dir is on PATH, then retry."
     exit 1
   fi
-  echo "==> Using Herd PHP: $(herd php -r 'echo PHP_VERSION;')"
-  echo "    ($(command -v herd))"
+  ui_step "Using Herd PHP: $(herd php -r 'echo PHP_VERSION;')"
+  ui_info "$(command -v herd)"
 }
 
 # Run Artisan via Herd's PHP (never bare `php`).
@@ -56,30 +69,30 @@ herd_artisan() {
   herd php artisan "$@"
 }
 
-echo "==> Site folder: ${SITE_NAME}"
-echo "==> Herd URL:    ${APP_URL}"
+ui_step "Site folder: ${SITE_NAME}"
+ui_step "Herd URL:    ${APP_URL}"
 echo ""
 
 herd_require
 
 echo ""
-echo "DBngin: stop all MySQL services, ensure a service named \"${SITE_NAME}\" exists,"
-echo "create it if needed, then start only that service on 127.0.0.1:3306 (root / empty password)."
-echo "Also stop any non-DBngin MySQL that might bind 3306 (e.g. Herd MySQL)."
+ui_warn "DBngin will stop all MySQL services, ensure \"${SITE_NAME}\" exists, then start only that service."
+ui_info "Also stop any non-DBngin MySQL that might bind 3306 (e.g. Herd MySQL)."
 echo ""
 
 if ! command -v mysql >/dev/null 2>&1; then
-  echo "ERROR: mysql client not found on PATH. Install mysql-client or add DBngin's client to PATH." >&2
+  ui_err "mysql client not found on PATH. Install mysql-client or add DBngin's client to PATH."
   exit 1
 fi
 
 dbngin_prepare_for_site "$SITE_NAME"
 
-echo "==> herd composer install"
+ui_step "Running: herd composer install"
+ui_cmd "herd composer install"
 herd composer install
 
 if [[ ! -f .env ]]; then
-  echo "==> Copying .env.example → .env"
+  ui_step "Copying .env.example → .env"
   cp .env.example .env
 fi
 
@@ -110,35 +123,40 @@ set_env "GUMLET_ENABLED" "false"
 
 rm -f .env.bak
 
-echo "==> Creating database \`${SITE_NAME}\` if needed"
+ui_step "Creating database \`${SITE_NAME}\` if needed"
 mysql -h 127.0.0.1 -P 3306 -u root -e "CREATE DATABASE IF NOT EXISTS \`${SITE_NAME}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 if ! grep -q '^APP_KEY=base64:' .env; then
-  echo "==> Generating APP_KEY (herd php artisan)"
+  ui_step "Generating APP_KEY"
+  ui_cmd "herd php artisan key:generate"
   herd_artisan key:generate
 fi
 
-echo "==> Migrate (herd php artisan)"
+ui_step "Migrate"
+ui_cmd "herd php artisan migrate --force"
 herd_artisan migrate --force
 
-echo "==> npm install + build"
+ui_step "npm install + build"
+ui_cmd "npm install && npm run build"
 npm install
 npm run build
 
-echo "==> storage:link (herd php artisan)"
+ui_step "storage:link"
+ui_cmd "herd php artisan storage:link"
 herd_artisan storage:link || true
 
 if [[ "$DO_SEED" -eq 1 ]]; then
-  echo "==> Seed homepage (herd php artisan)"
+  ui_step "Seed homepage"
+  ui_cmd "herd php artisan db:seed --force"
   herd_artisan db:seed --force
 fi
 
-echo "==> Register site with Herd (link)"
+ui_step "Register site with Herd (link)"
 # Sites under BD_PROJECTS are not in Herd's parked paths (~/Herd only).
-# Link matches how bd_shop / other Developer sites are registered.
 if herd links 2>/dev/null | grep -q "${SITE_NAME}"; then
-  echo "    Already linked: ${SITE_NAME}"
+  ui_info "Already linked: ${SITE_NAME}"
 else
+  ui_cmd "herd link ${SITE_NAME}"
   herd link "${SITE_NAME}"
 fi
 
@@ -148,19 +166,16 @@ if [[ "$DO_ADMIN" -eq 1 ]]; then
     read -r -p "Create a Twill superadmin now? [Y/n] " reply
     reply="${reply:-Y}"
     if [[ "$reply" =~ ^[Yy]$ ]]; then
+      ui_cmd "herd php artisan twill:superadmin"
       herd_artisan twill:superadmin
     else
-      echo "Skipped. Later: herd php artisan twill:superadmin"
+      ui_info "Skipped. Later:"
+      ui_cmd "herd php artisan twill:superadmin"
     fi
   else
-    echo "==> Non-interactive shell: skip twill:superadmin (run: herd php artisan twill:superadmin)"
+    ui_step "Non-interactive shell: skip twill:superadmin"
+    ui_cmd "herd php artisan twill:superadmin"
   fi
 fi
 
-echo ""
-echo "==> Setup complete."
-echo "    Site:  ${APP_URL}"
-echo "    Admin: ${APP_URL}/admin"
-echo "    Herd:  linked as ${SITE_NAME} (check Sites / herd links)"
-echo "    PHP:   always use \`herd php artisan …\` / \`herd composer …\` for this project"
-echo "    Gumlet is off locally (GUMLET_ENABLED=false)."
+ui_print_site_reference "$SITE_NAME" "$ROOT" "$APP_URL"
