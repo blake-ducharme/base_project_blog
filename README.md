@@ -4,11 +4,23 @@ Laravel + Twill CMS starter for local development with **Herd** and **DBngin**. 
 
 ## Stack
 
-- PHP 8.3+ / Laravel 12
+- PHP 8.3+ / Laravel 12 (local PHP via **Laravel Herd**)
 - Twill CMS 3.5
 - MySQL (DBngin locally)
 - Tailwind CSS v4, Alpine.js, Barba.js
 - Optional Gumlet image CDN (off locally)
+
+## PHP / Composer (Herd only)
+
+Local CLI must use Herd — do **not** rely on bare `php` / Homebrew PHP:
+
+```bash
+herd php -v
+herd php artisan …
+herd composer …
+```
+
+`bin/setup.sh` and `new-twill-blog` already call `herd php` and `herd composer`.
 
 ## New site (recommended)
 
@@ -20,14 +32,37 @@ From `~/Developer/BD_PROJECTS`:
 
 This clones [base_project_blog](https://github.com/blake-ducharme/base_project_blog) into `my-client-blog` and runs `bin/setup.sh`. The **folder name** becomes:
 
-- Herd URL: `http://my-client-blog.test`
-- MySQL database: `my-client-blog`
+- Herd URL: `http://my-client-blog.test` (registered with `herd link`)
+- DBngin MySQL service + Laravel schema: `my-client-blog`
+
+### Why a new site may be missing from the Herd UI
+
+Herd’s **parked** path is only `~/Herd/`. Projects under `BD_PROJECTS` are **not** auto-listed until linked (same pattern as `bd_shop`).
+
+`bin/setup.sh` runs `herd link <folder-name>` so the site appears under Herd links / Sites.
+
+To fix an existing folder that was set up before this:
+
+```bash
+cd ~/Developer/BD_PROJECTS/muratrecevik
+herd link muratrecevik
+herd links   # confirm
+```
 
 ### DBngin
 
-Setup expects MySQL at `127.0.0.1:3306` as `root` with an **empty password**.
+`bin/setup.sh` manages DBngin for you (DBngin has no official CLI; the script drives its launchd services):
 
-**Stop other local MySQL instances** (including Herd’s MySQL) so only DBngin owns that IP/port.
+1. **Stops all** DBngin MySQL services (so nothing else owns `3306`)
+2. **Ensures** a MySQL service named like the project folder exists (creates an empty one if missing)
+3. **Starts only that** service
+4. Creates the Laravel schema (`DB_DATABASE` = folder name) if needed, then migrates
+
+Defaults: `127.0.0.1:3306`, user `root`, empty password.
+
+Do **not** manually start `PeterDB` / `bd_shop` / etc. for a new site — let setup create/start the project-named service so migrations never land on another project’s server.
+
+Also stop any **non-DBngin** MySQL that might bind `3306` (e.g. Herd MySQL).
 
 ## Existing clone / manual setup
 
@@ -38,19 +73,20 @@ cd /path/to/your-site-folder   # folder name = Herd host
 # ./bin/setup.sh --no-seed
 ```
 
-Or step by step:
+Or step by step (**Herd PHP**):
 
 ```bash
-composer install
+herd composer install
 cp .env.example .env
 # edit APP_URL / DB_* or let setup.sh stamp them from the folder name
-php artisan key:generate
-php artisan migrate
+herd php artisan key:generate
+herd php artisan migrate
 npm install
 npm run build
-php artisan storage:link
-php artisan db:seed
-php artisan twill:superadmin
+herd php artisan storage:link
+herd php artisan db:seed
+herd php artisan twill:superadmin
+herd link "$(basename "$PWD")"
 ```
 
 Admin is at `/admin`.
@@ -60,9 +96,9 @@ Admin is at `/admin`.
 `HomePageSeeder` is idempotent — re-running reuses the existing `home` page and refreshes Homepage settings.
 
 ```bash
-php artisan db:seed
+herd php artisan db:seed
 # or
-php artisan db:seed --class=HomePageSeeder
+herd php artisan db:seed --class=HomePageSeeder
 ```
 
 ## Gumlet (image CDN)
@@ -88,7 +124,7 @@ GUMLET_ORIGIN_BASE_URL=https://your-production-host.com
 GUMLET_URL_MODE=path
 ```
 
-Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BASE_URL`. Prefer `path` mode so `/storage/…` maps 1:1 onto the Gumlet host. After changing env on the server: `php artisan config:cache`.
+Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BASE_URL`. Prefer `path` mode so `/storage/…` maps 1:1 onto the Gumlet host. After changing env on the server: `php artisan config:cache` (Dreamhost PHP, not Herd).
 
 ## Deploy to Dreamhost
 

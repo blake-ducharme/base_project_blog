@@ -36,4 +36,17 @@ class Page extends Model
     public string $metadataDefaultOgType = 'website';
 
     public string $metadataDefaultCardType = 'summary_large_image';
+
+    // Declared as a real property so HasMetadata does not write mediasParams into
+    // Eloquent attributes (array attributes break Laravel insert binding).
+    public $mediasParams = [
+        'cover' => [
+            'default' => [
+                [
+                    'name' => 'default',
+                    'ratio' => 16 / 9,
+                ],
+            ],
+        ],
+    ];
 }
