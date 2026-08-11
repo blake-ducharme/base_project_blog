@@ -4,7 +4,7 @@ Laravel + Twill CMS starter for local development with **Herd** and **DBngin**. 
 
 ## Stack
 
-- PHP 8.3+ / Laravel 12 (local PHP via **Laravel Herd**)
+- PHP 8.4 locally via **Laravel Herd** (match Dreamhost to 8.4 — see deploy section)
 - Twill CMS 3.5
 - MySQL (DBngin locally)
 - Tailwind CSS v4, Alpine.js, Barba.js
@@ -167,7 +167,7 @@ GUMLET_ORIGIN_BASE_URL=https://your-production-host.com
 GUMLET_URL_MODE=path
 ```
 
-Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BASE_URL`. Prefer `path` mode so `/storage/…` maps 1:1 onto the Gumlet host. After changing env on the server: `php artisan config:cache` (Dreamhost PHP, not Herd).
+Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BASE_URL`. Prefer `path` mode so `/storage/…` maps 1:1 onto the Gumlet host. After changing env on the server: `/usr/local/php84/bin/php artisan config:cache`.
 
 ## Deploy to Dreamhost
 
@@ -176,28 +176,57 @@ Create a Gumlet **Web Folders** source whose Base URL matches `GUMLET_ORIGIN_BAS
 | What | How |
 |------|-----|
 | App code (PHP, views, config, …) | Push to the site’s **GitHub** repo → on Dreamhost **`git pull`** |
-| PHP dependencies | On Dreamhost: **`php composer.phar install …`** |
+| PHP dependencies | On Dreamhost: **`/usr/local/php84/bin/php composer.phar install …`** (PHAR on server, not in this repo) |
 | Frontend build (`public/build/`) | Build on your Mac → **`./rsync.sh`** (assets only; `public/build` is gitignored) |
 
 Do **not** rsync the whole project. Dreamhost’s checkout is the git repo; rsync only refreshes Vite output.
 
+### PHP version (Herd 8.4 ↔ Dreamhost 8.4)
+
+Local Herd uses **PHP 8.4**, so `composer.lock` may require packages that need `php >=8.4.1`. Match production:
+
+1. **Panel:** set the domain to **PHP 8.4** (web).
+2. **SSH:** do **not** rely on bare `php` — the shell default is often older (e.g. 8.2) even when the panel says 8.3/8.4. Always call **8.4** explicitly:
+
+```bash
+/usr/local/php84/bin/php -v
+```
+
+Optional — make the shell default to 8.4 (`~/.bash_profile`):
+
+```bash
+export PATH=/usr/local/php84/bin:$PATH
+# then: source ~/.bash_profile && php -v
+```
+
+### `composer.phar` (server only)
+
+Not committed. Install once on Dreamhost (home or site dir), using PHP 8.4:
+
+```bash
+curl -sS https://getcomposer.org/installer | /usr/local/php84/bin/php
+# leaves composer.phar in the current directory
+```
+
 ### 1. Code (GitHub → Dreamhost)
 
 ```bash
-# on your Mac
+# on your Mac (Herd PHP 8.4)
 cd ~/Developer/BD_PROJECTS/my-client-blog
 git push
 
-# on Dreamhost (SSH)
+# on Dreamhost (SSH) — first time: clone the SITE repo (not the starter), add production .env
+# git clone https://github.com/blake-ducharme/my-client-blog.git /path/to/site
+
 cd /path/to/site
 git pull
-php composer.phar install --no-dev --optimize-autoloader
-php artisan migrate --force
-php artisan storage:link
-php artisan config:cache && php artisan route:cache && php artisan view:cache
+/usr/local/php84/bin/php composer.phar install --no-dev --optimize-autoloader
+/usr/local/php84/bin/php artisan migrate --force
+/usr/local/php84/bin/php artisan storage:link
+/usr/local/php84/bin/php artisan config:cache
+/usr/local/php84/bin/php artisan route:cache
+/usr/local/php84/bin/php artisan view:cache
 ```
-
-First-time server: clone the **site** GitHub repo (not the starter), create production `.env`, then the commands above.
 
 ### 2. Frontend assets (`./rsync.sh`)
 

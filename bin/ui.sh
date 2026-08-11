@@ -83,6 +83,9 @@ ui_print_site_reference() {
   ui_info "Vite assets only → ./rsync.sh (public/build/)"
   ui_cmd "git push"
   ui_cmd "./rsync.sh"
-  ui_info "On Dreamhost: git pull && php composer.phar install --no-dev --optimize-autoloader"
+  ui_info "On Dreamhost (PHP 8.4 CLI):"
+  ui_cmd "git pull"
+  ui_cmd "/usr/local/php84/bin/php composer.phar install --no-dev --optimize-autoloader"
+  ui_cmd "/usr/local/php84/bin/php artisan migrate --force"
   echo ""
 }
